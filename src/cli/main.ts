@@ -5,6 +5,7 @@ import { Command } from 'commander';
 import { runOnce, RunOptions } from '../core/runner';
 import { watchScaffold } from '../core/watcher';
 import {
+  ensureStructureFilesFromConfig,
   scanDirectoryToStructureText,
   writeScannedStructuresFromConfig,
 } from '../core/scan-structure';
@@ -170,6 +171,30 @@ async function handleInitCommand(
   );
 }
 
+
+async function handleStructuresCommand(
+  cwd: string,
+  baseOpts: BaseCliOptions,
+) {
+  const logger = createCliLogger(baseOpts);
+
+  logger.info('Ensuring structure files declared in config exist...');
+
+  const { created, existing } = await ensureStructureFilesFromConfig(cwd, {
+    scaffoldDirOverride: baseOpts.dir,
+  });
+
+  if (created.length === 0) {
+    logger.info('All structure files already exist. Nothing to do.');
+  } else {
+    for (const filePath of created) {
+      logger.info(`Created structure file: ${filePath}`);
+    }
+  }
+
+  existing.forEach((p) => logger.debug(`Structure file already exists: ${p}`));
+}
+
 async function main() {
   const cwd = process.cwd();
 
@@ -234,8 +259,21 @@ async function main() {
     await handleRunCommand(cwd, opts);
   });
 
+  interface StructuresCliOptions { }
+
+  program
+    .command('structures')
+    .description(
+      'Create missing structure files specified in the config (does not overwrite existing files)',
+    )
+    .action(async (_opts: StructuresCliOptions, cmd: Command) => {
+      const baseOpts = cmd.parent?.opts<BaseCliOptions>() ?? {};
+      await handleStructuresCommand(cwd, baseOpts);
+    });
+
   await program.parseAsync(process.argv);
 }
+
 
 // Run and handle errors
 main().catch((err) => {

@@ -212,3 +212,74 @@ export async function writeScannedStructuresFromConfig(
       );
    }
 }
+
+
+
+export interface EnsureStructuresResult {
+   created: string[];
+   existing: string[];
+}
+
+/**
+ * Ensure all structure files declared in the config exist.
+ *
+ * - Grouped mode: one file per group (group.structureFile || `${group.name}.txt`)
+ * - Single-root mode: config.structureFile || "structure.txt"
+ *
+ * Existing files are left untouched. Only missing files are created with
+ * a small header comment.
+ */
+export async function ensureStructureFilesFromConfig(
+   cwd: string,
+   options: { scaffoldDirOverride?: string } = {},
+): Promise<EnsureStructuresResult> {
+   const { config, scaffoldDir } = await loadScaffoldConfig(cwd, {
+      scaffoldDir: options.scaffoldDirOverride,
+   });
+
+   ensureDirSync(scaffoldDir);
+
+   const created: string[] = [];
+   const existing: string[] = [];
+
+   const seen = new Set<string>();
+
+   const ensureFile = (fileName: string) => {
+      if (!fileName) return;
+
+      const filePath = path.join(scaffoldDir, fileName);
+      const key = path.resolve(filePath);
+
+      if (seen.has(key)) return;
+      seen.add(key);
+
+      if (fs.existsSync(filePath)) {
+         existing.push(filePath);
+         return;
+      }
+
+      const header =
+         `# ${fileName}\n` +
+         `# Structure file for @timeax/scaffold\n` +
+         `# Define your desired folders/files here.\n`;
+
+      fs.writeFileSync(filePath, header, 'utf8');
+      created.push(filePath);
+   };
+
+   if (config.groups && config.groups.length > 0) {
+      for (const group of config.groups) {
+         const fileName = group.structureFile ?? `${group.name}.txt`;
+         ensureFile(fileName);
+      }
+   } else {
+      const fileName = config.structureFile ?? 'structure.txt';
+      ensureFile(fileName);
+   }
+
+   logger.debug(
+      `ensureStructureFilesFromConfig: created=${created.length}, existing=${existing.length}`,
+   );
+
+   return { created, existing };
+}

@@ -267,6 +267,45 @@ Two modes:
 
 ---
 
+### `scaffold structures`
+
+Ensure that all structure files declared in your config exist.
+
+```bash
+scaffold structures
+```
+
+What it does:
+
+* Loads `scaffold/config.*`.
+* Determines which structure files are expected:
+
+  * **Grouped mode** (`config.groups` defined): each group gets `group.structureFile || \`${group.name}.txt``.
+  * **Single-root mode** (no groups): uses `config.structureFile || 'structure.txt'`.
+* For each expected structure file:
+
+  * If it **already exists** → it is left untouched.
+  * If it is **missing** → it is created with a small header comment.
+
+Examples:
+
+```bash
+# With grouped config:
+# groups: [
+#   { name: 'app', root: 'app', structureFile: 'app.txt' },
+#   { name: 'frontend', root: 'resources/js', structureFile: 'frontend.txt' },
+# ]
+scaffold structures
+# => ensures scaffold/app.txt and scaffold/frontend.txt exist
+
+# With single-root config:
+# structureFile: 'structure.txt'
+scaffold structures
+# => ensures scaffold/structure.txt exists
+```
+
+This is useful right after setting up or editing `scaffold/config.ts` so that all declared structure files are present and ready to edit.
+
 ## TypeScript API
 
 You can also use the core functions programmatically.
