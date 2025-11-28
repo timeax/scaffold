@@ -1,7 +1,7 @@
 {
   "name": "@timeax/scaffold",
   "private": false,
-  "version": "0.0.6",
+  "version": "0.0.7",
   "description": "A CLI tool that scaffolds project file structures based on a user-defined, type-safe configuration file.",
   "keywords": [
     "scaffold"
@@ -38,7 +38,7 @@
     "build:watch": "tsup --watch",
     "scaffold": "node ./dist/cli.mjs",
     "dev:cli": "ts-node src/cli/main.ts",
-    "prepublishOnly": "node ./scripts/prepublish.mjs",
+    "prepublishOnly": "npm run build && node ./scripts/prepublish.mjs",
     "postpublish": "node ./scripts/postpublish.mjs",
     "test": "vitest"
   },

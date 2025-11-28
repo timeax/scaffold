@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 // noinspection RequiredAttributes
 
 import readline from 'readline';
