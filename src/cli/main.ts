@@ -1,3 +1,5 @@
+// noinspection RequiredAttributes
+
 import readline from 'readline';
 import path from 'path';
 import fs from 'fs';
@@ -13,7 +15,7 @@ import { initScaffold } from '../core/init-scaffold';
 import {
   defaultLogger,
   Logger,
-  type LogLevel,
+
 } from '../util/logger';
 import { ensureDirSync } from '../util/fs-utils';
 
