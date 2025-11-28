@@ -33,7 +33,9 @@
     "build": "tsup",
     "build:watch": "tsup --watch",
     "scaffold": "node ./dist/cli.mjs",
-    "dev:cli": "ts-node src/cli/main.ts"
+    "dev:cli": "ts-node src/cli/main.ts",
+    "prepublishOnly": "node ./scripts/prepublish.mjs",
+    "postpublish": "node ./scripts/postpublish.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",
