@@ -4,6 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import { ensureDirSync } from '../util/fs-utils';
 import { defaultLogger } from '../util/logger';
+import { SCAFFOLD_ROOT_DIR } from '../schema';
 
 const logger = defaultLogger.child('[init]');
 
@@ -52,7 +53,10 @@ const config: ScaffoldConfig = {
   //   base: 'src',        // apply to <root>/src
   //   base: '..',         // apply to parent of <root>
   // base: '.',
-
+  
+  // Number of spaces per indent level in structure files (default: 2).
+  // indentStep: 2,
+  
   // Cache file path, relative to base.
   // cacheFile: '.scaffold-cache.json',
 
@@ -85,7 +89,8 @@ const config: ScaffoldConfig = {
 export default config;
 `;
 
-const DEFAULT_STRUCTURE_TXT = `# scaffold/structure.txt
+
+const DEFAULT_STRUCTURE_TXT = `# ${SCAFFOLD_ROOT_DIR}/structure.txt
 # Example structure definition.
 # - Indent with 2 spaces per level
 # - Directories must end with "/"
@@ -113,7 +118,7 @@ export async function initScaffold(
    structurePath: string;
    created: { config: boolean; structure: boolean };
 }> {
-   const scaffoldDirRel = options.scaffoldDir ?? 'scaffold';
+   const scaffoldDirRel = options.scaffoldDir ?? SCAFFOLD_ROOT_DIR;
    const scaffoldDirAbs = path.resolve(cwd, scaffoldDirRel);
    const configFileName = options.configFileName ?? 'config.ts';
    const structureFileName = options.structureFileName ?? 'structure.txt';

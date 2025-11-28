@@ -13,6 +13,55 @@ interface ParsedLine {
 }
 
 /**
+ * Strip inline comments from a content segment.
+ *
+ * Supports:
+ *   - "index.ts  # comment"
+ *   - "index.ts  // comment"
+ *
+ * Rules:
+ * - We assume leading indentation has already been removed.
+ * - Leading '#' or '//' (full-line comments) are handled BEFORE this function.
+ * - A comment starts at the first '#' or '//' that is
+ *   preceded by whitespace (space or tab).
+ */
+function stripInlineComment(content: string): string {
+   let cutIndex = -1;
+   const len = content.length;
+
+   for (let i = 0; i < len; i++) {
+      const ch = content[i];
+      const prev = i > 0 ? content[i - 1] : '';
+
+      // Inline "# ..."
+      if (ch === '#') {
+         if (i === 0) continue; // full-line handled earlier
+         if (prev === ' ' || prev === '\t') {
+            cutIndex = i;
+            break;
+         }
+      }
+
+      // Inline "// ..."
+      if (
+         ch === '/' &&
+         i + 1 < len &&
+         content[i + 1] === '/' &&
+         (prev === ' ' || prev === '\t')
+      ) {
+         cutIndex = i;
+         break;
+      }
+   }
+
+   if (cutIndex === -1) {
+      return content.trimEnd();
+   }
+
+   return content.slice(0, cutIndex).trimEnd();
+}
+
+/**
  * Parse a single non-empty, non-comment line into a ParsedLine.
  * Supports inline annotations:
  * - @stub:name
@@ -20,15 +69,38 @@ interface ParsedLine {
  * - @exclude:pattern,pattern2
  */
 function parseLine(line: string, lineNo: number): ParsedLine | null {
-   const match = line.match(/^(\s*)(.+)$/);
+   const match = line.match(/^(\s*)(.*)$/);
    if (!match) return null;
 
    const indentSpaces = match[1].length;
-   const rest = match[2].trim();
-   if (!rest || rest.startsWith('#')) return null;
+   let rest = match[2];
 
-   const parts = rest.split(/\s+/);
+   // If line (after indent) is empty, skip
+   if (!rest.trim()) return null;
+
+   // Full-line comments after indent
+   const trimmedRest = rest.trimStart();
+   if (trimmedRest.startsWith('#') || trimmedRest.startsWith('//')) {
+      return null;
+   }
+
+   // Strip inline comments (# or //) before parsing tokens
+   const stripped = stripInlineComment(rest);
+   const trimmed = stripped.trim();
+   if (!trimmed) return null;
+
+   const parts = trimmed.split(/\s+/);
+   if (!parts.length) return null;
+
    const pathToken = parts[0];
+
+   // 🚫 Reserve ":" for annotations only – paths may not contain it.
+   if (pathToken.includes(':')) {
+      throw new Error(
+         `structure.txt: ":" is reserved for annotations (@stub:, @include:, etc). ` +
+         `Invalid path "${pathToken}" on line ${lineNo}.`,
+      );
+   }
 
    let stub: string | undefined;
    const include: string[] = [];
@@ -74,14 +146,17 @@ function parseLine(line: string, lineNo: number): ParsedLine | null {
  * Convert a structure.txt content into a nested StructureEntry[].
  *
  * Rules:
- * - Indentation is **2 spaces per level** (strict).
- * - Indent must be a multiple of 2.
+ * - Indentation is **indentStep** spaces per level (default: 2).
+ * - Indent must be a multiple of indentStep.
  * - You cannot "skip" levels (no jumping from level 0 to 2 directly).
  * - **Only directories can have children**:
  *   - If you indent under a file, an error is thrown.
  * - Folders must end with "/" in the txt; paths are normalized to POSIX.
  */
-export function parseStructureText(text: string): StructureEntry[] {
+export function parseStructureText(
+   text: string,
+   indentStep = 2,
+): StructureEntry[] {
    const lines = text.split(/\r?\n/);
    const parsed: ParsedLine[] = [];
 
@@ -100,23 +175,22 @@ export function parseStructureText(text: string): StructureEntry[] {
    };
 
    const stack: StackItem[] = [];
-   const INDENT_STEP = 2;
 
    for (const p of parsed) {
       const { indentSpaces, lineNo } = p;
 
-      if (indentSpaces % INDENT_STEP !== 0) {
+      if (indentSpaces % indentStep !== 0) {
          throw new Error(
             `structure.txt: Invalid indent on line ${lineNo}. ` +
-            `Indent must be multiples of ${INDENT_STEP} spaces.`,
+            `Indent must be multiples of ${indentStep} spaces.`,
          );
       }
 
-      const level = indentSpaces / INDENT_STEP;
+      const level = indentSpaces / indentStep;
 
       // Determine parent level and enforce no skipping
       if (level > stack.length) {
-         // e.g. current stack depth 1, but line level=2+ is invalid
+         // e.g. current stack depth 1, but line level=3 is invalid
          if (level !== stack.length + 1) {
             throw new Error(
                `structure.txt: Invalid indentation on line ${lineNo}. ` +
@@ -146,7 +220,6 @@ export function parseStructureText(text: string): StructureEntry[] {
       const clean = p.rawPath.replace(/\/$/, '');
       const basePath = toPosixPath(clean);
 
-      // Determine parent based on level
       // Pop stack until we are at the correct depth
       while (stack.length > level) {
          stack.pop();
@@ -193,9 +266,9 @@ export function parseStructureText(text: string): StructureEntry[] {
             rootEntries.push(fileEntry);
          }
 
-         // files are not added to the stack; they cannot have children
+         // We still push files into the stack at this level so that
+         // bad indentation under them can be detected and rejected.
          stack.push({ level, entry: fileEntry, isDir: false });
-         // but next lines at same or lower level will pop correctly
       }
    }
 

@@ -7,11 +7,12 @@ import crypto from 'crypto';
 import { pathToFileURL } from 'url';
 import { transform } from 'esbuild';
 
-import type { ScaffoldConfig } from '../schema';
+import { SCAFFOLD_ROOT_DIR, type ScaffoldConfig } from '../schema';
 import { defaultLogger } from '../util/logger';
 import { ensureDirSync } from '../util/fs-utils';
 
 const logger = defaultLogger.child('[config]');
+
 
 export interface LoadScaffoldConfigOptions {
    /**
@@ -68,7 +69,7 @@ export async function loadScaffoldConfig(
    // First pass: figure out an initial scaffold dir just to locate config.*
    const initialScaffoldDir = options.scaffoldDir
       ? path.resolve(absCwd, options.scaffoldDir)
-      : path.join(absCwd, 'scaffold');
+      : path.join(absCwd, SCAFFOLD_ROOT_DIR);
 
    const configPath =
       options.configPath ?? resolveConfigPath(initialScaffoldDir);
@@ -85,7 +86,7 @@ export async function loadScaffoldConfig(
    // Final scaffoldDir (can still be overridden by CLI)
    const scaffoldDir = options.scaffoldDir
       ? path.resolve(absCwd, options.scaffoldDir)
-      : path.join(configRoot, 'scaffold');
+      : path.join(configRoot, SCAFFOLD_ROOT_DIR);
 
    // projectRoot (base) is relative to configRoot
    const baseRoot = config.base

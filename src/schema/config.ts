@@ -143,9 +143,18 @@ export interface ScaffoldConfig {
     * runner / CLI.
     */
    watch?: boolean;
+
+
+   /**
+    * Number of spaces per indent level in structure files.
+    * Default: 2.
+    *
+    * Examples:
+    * - 2  → "··entry"
+    * - 4  → "····entry"
+    */
+   indentStep?: number;
 }
-
-
 /**
  * Options when scanning an existing directory into a structure.txt tree.
  */

@@ -1,4 +1,4 @@
-# Scaffold - `@timeax/scaffold`
+# @timeax/scaffold
 
 A tiny, opinionated scaffolding tool that keeps your project structure in sync with a **declarative tree** (like `structure.txt`) – Prisma‑style.
 
@@ -8,11 +8,13 @@ A tiny, opinionated scaffolding tool that keeps your project structure in sync w
 * Reverse‑engineer existing projects into `*.txt` structures.
 * Watch for changes and re‑apply automatically.
 
+> **Supported structure files:** `.tss`, `.stx`, `structure.txt`, and any `.txt` files inside `.scaffold/`.
+
 ---
 
 ## Features
 
-* **Prisma‑style scaffold directory**: all config and structure lives under `scaffold/` by default.
+* **Prisma‑style scaffold directory**: all config and structure lives under `.scaffold/` by default.
 * **Config‑driven groups**: declare multiple roots (e.g. `app`, `frontend`) with their own structure files.
 * **Plain‑text structure files**: strict, easy‑to‑read tree syntax with indentation and annotations.
 * **Safe apply**:
@@ -26,8 +28,14 @@ A tiny, opinionated scaffolding tool that keeps your project structure in sync w
   * Regular hooks around file create/delete.
   * Stub hooks around content generation.
 * **Stubs**: programmatic content generators for files (e.g. React pages, controllers, etc.).
-* **Watch mode**: watch `scaffold/` for changes and re‑run automatically.
+* **Watch mode**: watch `.scaffold/` for changes and re‑run automatically.
 * **Scanner**: generate `structure.txt` (or per‑group `*.txt`) from an existing codebase.
+* **VS Code integration** (via a companion extension):
+
+  * Syntax highlighting for `.tss`, `.stx`, `structure.txt`, and `.scaffold/**/*.txt`.
+  * Inline diagnostics using the same parser as the CLI.
+  * “Go to file” from a structure line.
+  * Simple formatting and sorting commands.
 
 ---
 
@@ -57,7 +65,7 @@ pnpm scaffold init
 This will create:
 
 ```txt
-scaffold/
+.scaffold/
   config.ts       # main ScaffoldConfig
   structure.txt   # example structure (single-root mode)
 ```
@@ -74,7 +82,7 @@ scaffold init --dir tools/scaffold
 
 ### 2. Define your structure
 
-By default, `scaffold/structure.txt` is used in single‑root mode.
+By default, `.scaffold/structure.txt` is used in single‑root mode.
 
 Example:
 
@@ -98,12 +106,16 @@ README.md
 
 **Rules:**
 
-* Indent with **2 spaces per level** (strict).
+* Indent with **2 spaces per level** (strict by default; configurable).
 * Directories **must** end with `/`.
 * Files **must not** end with `/`.
 * You **cannot indent under a file** (files cannot have children).
 * You can’t “skip” levels (no jumping from depth 0 to depth 2 in one go).
-* Lines starting with `#` are comments.
+* Lines starting with `#` or `//` (after indentation) are comments.
+* Inline comments are supported:
+
+  * `index.ts  # comment`
+  * `index.ts  // comment`
 
 #### Annotations
 
@@ -124,20 +136,22 @@ Supported inline annotations:
 
 These map onto the `StructureEntry` fields in TypeScript.
 
+> `:` is reserved for annotations (e.g. `@stub:page`). Paths themselves must **not** contain `:`.
+
 ---
 
 ### 3. Configure groups (optional but recommended)
 
-In `scaffold/config.ts` you can enable grouped mode:
+In `.scaffold/config.ts` you can enable grouped mode:
 
 ```ts
 import type { ScaffoldConfig } from '@timeax/scaffold';
 
 const config: ScaffoldConfig = {
-  root: '.', // project root (optional, defaults to cwd)
+  base: '.', // project root (optional, defaults to cwd)
 
   groups: [
-    { name: 'app', root: 'app', structureFile: 'app.txt' },
+    { name: 'app',      root: 'app',          structureFile: 'app.txt' },
     { name: 'frontend', root: 'resources/js', structureFile: 'frontend.txt' },
   ],
 
@@ -148,21 +162,21 @@ const config: ScaffoldConfig = {
 export default config;
 ```
 
-Then create per‑group structure files in `scaffold/`:
+Then create per‑group structure files in `.scaffold/`:
 
 ```txt
-# scaffold/app.txt
+# .scaffold/app.txt
 App/Services/
   UserService.php
 
-# scaffold/frontend.txt
+# .scaffold/frontend.txt
 src/
   index.tsx
   pages/
     home.tsx
 ```
 
-> When `groups` is defined and non‑empty, single‑root `structure`/`structureFile` is ignored.
+> When `groups` is defined and non‑empty, single‑root `structure` / `structureFile` is ignored.
 
 ---
 
@@ -173,16 +187,16 @@ src/
 scaffold
 
 # or with explicit scaffold dir / config
-scaffold --dir scaffold --config scaffold/config.ts
+scaffold --dir .scaffold --config .scaffold/config.ts
 ```
 
 What happens:
 
-* Config is loaded from `scaffold/config.*` (Prisma‑style resolution).
+* Config is loaded from `.scaffold/config.*` (Prisma‑style resolution).
 * Structure(s) are resolved (grouped or single‑root).
 * Files/directories missing on disk are created.
 * New files are registered in `.scaffold-cache.json` (under project root by default).
-* Any previously created files that are no longer in the structure are candidates for deletion.
+* Any previously created files that are no longer in the structure are candidates for deletion:
 
   * Small files are deleted automatically.
   * Large files (configurable threshold) trigger an interactive prompt.
@@ -195,8 +209,8 @@ scaffold --watch
 
 * Watches:
 
-  * `scaffold/config.*`
-  * `scaffold/*.txt`
+  * `.scaffold/config.*`
+  * `.scaffold/*.txt`
 * Debounces rapid edits.
 * Prevents overlapping runs.
 
@@ -213,10 +227,12 @@ scaffold [options]
 Options:
 
 * `-c, --config <path>` – override config file path.
-* `-d, --dir <path>` – override scaffold directory (default: `./scaffold`).
+* `-d, --dir <path>` – override scaffold directory (default: `./.scaffold`).
 * `-w, --watch` – watch scaffold directory for changes.
 * `--quiet` – silence logs.
 * `--debug` – verbose debug logs.
+
+---
 
 ### `scaffold init`
 
@@ -228,8 +244,10 @@ scaffold init [options]
 
 Options:
 
-* `-d, --dir <path>` – scaffold directory (default: `./scaffold`, inherited from root options).
+* `-d, --dir <path>` – scaffold directory (default: `./.scaffold`, inherited from root options).
 * `--force` – overwrite existing `config.ts` / `structure.txt`.
+
+---
 
 ### `scaffold scan`
 
@@ -237,33 +255,33 @@ Generate `structure.txt`‑style definitions from an existing project.
 
 Two modes:
 
-1. **Config‑aware mode** (default if no `--root` / `--out` given):
+#### 1. Config‑aware mode (default if no `--root` / `--out` given)
 
-   ```bash
-   scaffold scan
-   scaffold scan --from-config
-   scaffold scan --from-config --groups app frontend
-   ```
+```bash
+scaffold scan
+scaffold scan --from-config
+scaffold scan --from-config --groups app frontend
+```
 
-   * Loads `scaffold/config.ts`.
-   * For each `group` in config:
+* Loads `.scaffold/config.ts`.
+* For each `group` in config:
 
-     * Scans `group.root` on disk.
-     * Writes to `scaffold/<group.structureFile || group.name + '.txt'>`.
-   * `--groups` filters which groups to scan.
+  * Scans `group.root` on disk.
+  * Writes to `.scaffold/<group.structureFile || group.name + '.txt'>`.
+* `--groups` filters which groups to scan.
 
-2. **Manual mode** (single root):
+#### 2. Manual mode (single root)
 
-   ```bash
-   scaffold scan -r src
-   scaffold scan -r src -o scaffold/src.txt
-   ```
+```bash
+scaffold scan -r src
+scaffold scan -r src -o .scaffold/src.txt
+```
 
-   Options:
+Options:
 
-   * `-r, --root <path>` – directory to scan.
-   * `-o, --out <path>` – output file (otherwise prints to stdout).
-   * `--ignore <patterns...>` – extra globs to ignore (in addition to defaults like `node_modules/**`, `.git/**`, etc.).
+* `-r, --root <path>` – directory to scan.
+* `-o, --out <path>` – output file (otherwise prints to stdout).
+* `--ignore <patterns...>` – extra globs to ignore (in addition to defaults like `node_modules/**`, `.git/**`, etc.).
 
 ---
 
@@ -277,10 +295,10 @@ scaffold structures
 
 What it does:
 
-* Loads `scaffold/config.*`.
+* Loads `.scaffold/config.*`.
 * Determines which structure files are expected:
 
-  * **Grouped mode** (`config.groups` defined): each group gets `group.structureFile || \`${group.name}.txt``.
+  * **Grouped mode** (`config.groups` defined): each group gets `group.structureFile || `${group.name}.txt``.
   * **Single-root mode** (no groups): uses `config.structureFile || 'structure.txt'`.
 * For each expected structure file:
 
@@ -296,15 +314,17 @@ Examples:
 #   { name: 'frontend', root: 'resources/js', structureFile: 'frontend.txt' },
 # ]
 scaffold structures
-# => ensures scaffold/app.txt and scaffold/frontend.txt exist
+# => ensures .scaffold/app.txt and .scaffold/frontend.txt exist
 
 # With single-root config:
 # structureFile: 'structure.txt'
 scaffold structures
-# => ensures scaffold/structure.txt exists
+# => ensures .scaffold/structure.txt exists
 ```
 
-This is useful right after setting up or editing `scaffold/config.ts` so that all declared structure files are present and ready to edit.
+This is useful right after setting up or editing `.scaffold/config.ts` so that all declared structure files are present and ready to edit.
+
+---
 
 ## TypeScript API
 
@@ -315,8 +335,8 @@ import { runOnce } from '@timeax/scaffold';
 
 await runOnce(process.cwd(), {
   // optional overrides
-  configPath: 'scaffold/config.ts',
-  scaffoldDir: 'scaffold',
+  configPath: '.scaffold/config.ts',
+  scaffoldDir: '.scaffold',
 });
 ```
 
@@ -337,7 +357,7 @@ const results = await scanProjectFromConfig(process.cwd(), {
   groups: ['app', 'frontend'],
 });
 
-// write group structure files to scaffold/
+// write group structure files to .scaffold/
 await writeScannedStructuresFromConfig(process.cwd(), {
   groups: ['app'],
 });
@@ -401,7 +421,9 @@ const config: ScaffoldConfig = {
       name: 'page',
       async getContent(ctx) {
         const name = ctx.targetPath.split('/').pop();
-        return `export default function ${name}() {\n  return <div>${name}</div>;\n}`;
+        return `export default function ${name}() {
+  return <div>${name}</div>;
+}`;
       },
       hooks: {
         preStub: [
@@ -418,7 +440,7 @@ const config: ScaffoldConfig = {
 };
 ```
 
-In `structure.txt`:
+In a structure file:
 
 ```txt
 src/
@@ -459,5 +481,82 @@ Some things this package is intentionally designed to grow into:
 * Stub groups (one logical stub creating multiple files).
 * Built‑in templates for common stacks (Laravel + Inertia, Next.js, etc.).
 * Better diff/dry‑run UX (show what will change without touching disk).
+* Deeper VS Code integration:
+
+  * Tree-aware sorting.
+  * Visual tree editor.
+  * Code actions / quick fixes for common mistakes.
 
 PRs and ideas are welcome ✨
+
+---
+
+## VS Code extension
+
+There is an official VS Code companion extension for `@timeax/scaffold` that makes working with your structure files much nicer.
+
+### Language support
+
+The extension adds a custom language **Scaffold Structure** and:
+
+* Highlights:
+
+  * Directories (lines ending with `/`)
+  * Files
+  * Inline annotations like `@stub:name`, `@include:pattern`, `@exclude:pattern`
+  * Comments using `#` or `//` (full-line and inline)
+* Treats the following files as scaffold structures:
+
+  * `*.tss`
+  * `*.stx`
+  * `structure.txt`
+  * Any `.txt` file inside your `.scaffold/` directory
+
+The syntax rules match the CLI parser:
+
+* Indent is in fixed steps (configurable via `indentStep`).
+* Only directories can have children.
+* `:` is reserved for annotations and not allowed inside path names.
+
+### Editor commands
+
+The extension contributes several commands (available via the Command Palette and context menus when editing a scaffold structure file):
+
+* **Scaffold: Go to file**
+
+  * Reads the path on the current line and opens the corresponding file in your project.
+  * Respects `.scaffold/config.*`:
+
+    * Uses `base`/`root` to resolve paths.
+    * If the current structure file belongs to a `group`, it resolves relative to that group’s `root`.
+  * If the file doesn’t exist, it can prompt to create it and open it immediately.
+
+* **Scaffold: Format structure file**
+
+  * Normalizes line endings and trims trailing whitespace.
+  * Designed to be safe even on partially-invalid files.
+  * Future versions may use the full AST from `@timeax/scaffold` to enforce indentation and ordering.
+
+* **Scaffold: Sort entries**
+
+  * Naive helper that sorts non-comment lines lexicographically while keeping comment/blank lines in place.
+  * Useful for quick cleanups of small structure files.
+
+* **Scaffold: Open config**
+
+  * Opens `.scaffold/config.*` for the current workspace (searching common extensions like `config.ts`, `config.mts`, etc.).
+
+* **Scaffold: Open .scaffold folder**
+
+  * Reveals the `.scaffold/` directory in the VS Code Explorer.
+
+### Live validation (diagnostics)
+
+Whenever you open or edit a scaffold structure file:
+
+* The extension calls `parseStructureText` from `@timeax/scaffold` under the hood.
+* If parsing fails, the error message (e.g. invalid indentation, children under a file, bad path, etc.) is shown as an editor diagnostic (squiggly underline) on the relevant line.
+
+This means your editor and the CLI always agree on what is valid, since they share the same parser and rules.
+
+> The extension is optional, but highly recommended if you edit `*.tss` / `*.stx` or `structure.txt` files frequently.
