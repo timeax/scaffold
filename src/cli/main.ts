@@ -19,6 +19,7 @@ import {
 
 } from '../util/logger';
 import { ensureDirSync } from '../util/fs-utils';
+import {SCAFFOLD_ROOT_DIR} from "../schema";
 
 interface BaseCliOptions {
   config?: string;
@@ -160,7 +161,7 @@ async function handleInitCommand(
 ) {
   const logger = createCliLogger(baseOpts);
 
-  const scaffoldDirRel = baseOpts.dir ?? 'scaffold';
+  const scaffoldDirRel = baseOpts.dir ?? SCAFFOLD_ROOT_DIR;
 
   logger.info(`Initializing scaffold directory at "${scaffoldDirRel}"...`);
 
