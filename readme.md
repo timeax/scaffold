@@ -1,0 +1,424 @@
+# Scaffold - `@timeax/scaffold`
+
+A tiny, opinionated scaffolding tool that keeps your project structure in sync with a **declarative tree** (like `structure.txt`) – Prisma‑style.
+
+* Define your desired folders/files in plain text.
+* Group structures by area (e.g. `app`, `routes`, `resources/js`).
+* Generate those files safely, with caching + hooks + stubs.
+* Reverse‑engineer existing projects into `*.txt` structures.
+* Watch for changes and re‑apply automatically.
+
+---
+
+## Features
+
+* **Prisma‑style scaffold directory**: all config and structure lives under `scaffold/` by default.
+* **Config‑driven groups**: declare multiple roots (e.g. `app`, `frontend`) with their own structure files.
+* **Plain‑text structure files**: strict, easy‑to‑read tree syntax with indentation and annotations.
+* **Safe apply**:
+
+  * Creates missing files/directories.
+  * Tracks what it created in a cache.
+  * Only auto‑deletes files it previously created.
+  * Interactive delete for “large” files.
+* **Hooks**:
+
+  * Regular hooks around file create/delete.
+  * Stub hooks around content generation.
+* **Stubs**: programmatic content generators for files (e.g. React pages, controllers, etc.).
+* **Watch mode**: watch `scaffold/` for changes and re‑run automatically.
+* **Scanner**: generate `structure.txt` (or per‑group `*.txt`) from an existing codebase.
+
+---
+
+## Installation
+
+```bash
+npm install @timeax/scaffold --save-dev
+# or
+pnpm add -D @timeax/scaffold
+yarn add -D @timeax/scaffold
+```
+
+The package exposes both a **CLI** (`scaffold`) and a **programmatic API**.
+
+---
+
+## Quick start
+
+### 1. Initialize scaffold folder
+
+```bash
+npx scaffold init
+# or if installed locally
+pnpm scaffold init
+```
+
+This will create:
+
+```txt
+scaffold/
+  config.ts       # main ScaffoldConfig
+  structure.txt   # example structure (single-root mode)
+```
+
+If you want a different directory name:
+
+```bash
+scaffold init --dir tools/scaffold
+```
+
+> Use `--force` to overwrite existing config/structure files.
+
+---
+
+### 2. Define your structure
+
+By default, `scaffold/structure.txt` is used in single‑root mode.
+
+Example:
+
+```txt
+src/
+  index.ts
+
+  schema/
+    index.ts
+    adapter.ts
+    field.ts
+    field-map.ts
+    form.ts
+    input-field.ts
+    presets.ts
+    variant.ts
+
+index.ts
+README.md
+```
+
+**Rules:**
+
+* Indent with **2 spaces per level** (strict).
+* Directories **must** end with `/`.
+* Files **must not** end with `/`.
+* You **cannot indent under a file** (files cannot have children).
+* You can’t “skip” levels (no jumping from depth 0 to depth 2 in one go).
+* Lines starting with `#` are comments.
+
+#### Annotations
+
+You can attach metadata per line:
+
+```txt
+src/
+  pages/ @stub:page
+    home.tsx @include:pages/**
+    about.tsx @exclude:pages/legacy/**
+```
+
+Supported inline annotations:
+
+* `@stub:name` – attach a stub name for content generation.
+* `@include:pattern,pattern2` – extra include filters for this entry.
+* `@exclude:pattern,pattern2` – extra exclude filters for this entry.
+
+These map onto the `StructureEntry` fields in TypeScript.
+
+---
+
+### 3. Configure groups (optional but recommended)
+
+In `scaffold/config.ts` you can enable grouped mode:
+
+```ts
+import type { ScaffoldConfig } from '@timeax/scaffold';
+
+const config: ScaffoldConfig = {
+  root: '.', // project root (optional, defaults to cwd)
+
+  groups: [
+    { name: 'app', root: 'app', structureFile: 'app.txt' },
+    { name: 'frontend', root: 'resources/js', structureFile: 'frontend.txt' },
+  ],
+
+  hooks: {},
+  stubs: {},
+};
+
+export default config;
+```
+
+Then create per‑group structure files in `scaffold/`:
+
+```txt
+# scaffold/app.txt
+App/Services/
+  UserService.php
+
+# scaffold/frontend.txt
+src/
+  index.tsx
+  pages/
+    home.tsx
+```
+
+> When `groups` is defined and non‑empty, single‑root `structure`/`structureFile` is ignored.
+
+---
+
+### 4. Run scaffold
+
+```bash
+# single run
+scaffold
+
+# or with explicit scaffold dir / config
+scaffold --dir scaffold --config scaffold/config.ts
+```
+
+What happens:
+
+* Config is loaded from `scaffold/config.*` (Prisma‑style resolution).
+* Structure(s) are resolved (grouped or single‑root).
+* Files/directories missing on disk are created.
+* New files are registered in `.scaffold-cache.json` (under project root by default).
+* Any previously created files that are no longer in the structure are candidates for deletion.
+
+  * Small files are deleted automatically.
+  * Large files (configurable threshold) trigger an interactive prompt.
+
+### Watch mode
+
+```bash
+scaffold --watch
+```
+
+* Watches:
+
+  * `scaffold/config.*`
+  * `scaffold/*.txt`
+* Debounces rapid edits.
+* Prevents overlapping runs.
+
+---
+
+## CLI commands
+
+### `scaffold` (default)
+
+```bash
+scaffold [options]
+```
+
+Options:
+
+* `-c, --config <path>` – override config file path.
+* `-d, --dir <path>` – override scaffold directory (default: `./scaffold`).
+* `-w, --watch` – watch scaffold directory for changes.
+* `--quiet` – silence logs.
+* `--debug` – verbose debug logs.
+
+### `scaffold init`
+
+Initialize the scaffold directory + config + structure.
+
+```bash
+scaffold init [options]
+```
+
+Options:
+
+* `-d, --dir <path>` – scaffold directory (default: `./scaffold`, inherited from root options).
+* `--force` – overwrite existing `config.ts` / `structure.txt`.
+
+### `scaffold scan`
+
+Generate `structure.txt`‑style definitions from an existing project.
+
+Two modes:
+
+1. **Config‑aware mode** (default if no `--root` / `--out` given):
+
+   ```bash
+   scaffold scan
+   scaffold scan --from-config
+   scaffold scan --from-config --groups app frontend
+   ```
+
+   * Loads `scaffold/config.ts`.
+   * For each `group` in config:
+
+     * Scans `group.root` on disk.
+     * Writes to `scaffold/<group.structureFile || group.name + '.txt'>`.
+   * `--groups` filters which groups to scan.
+
+2. **Manual mode** (single root):
+
+   ```bash
+   scaffold scan -r src
+   scaffold scan -r src -o scaffold/src.txt
+   ```
+
+   Options:
+
+   * `-r, --root <path>` – directory to scan.
+   * `-o, --out <path>` – output file (otherwise prints to stdout).
+   * `--ignore <patterns...>` – extra globs to ignore (in addition to defaults like `node_modules/**`, `.git/**`, etc.).
+
+---
+
+## TypeScript API
+
+You can also use the core functions programmatically.
+
+```ts
+import { runOnce } from '@timeax/scaffold';
+
+await runOnce(process.cwd(), {
+  // optional overrides
+  configPath: 'scaffold/config.ts',
+  scaffoldDir: 'scaffold',
+});
+```
+
+Scanner:
+
+```ts
+import {
+  scanDirectoryToStructureText,
+  scanProjectFromConfig,
+  writeScannedStructuresFromConfig,
+} from '@timeax/scaffold';
+
+// low-level
+const text = scanDirectoryToStructureText('src');
+
+// config-aware (groups)
+const results = await scanProjectFromConfig(process.cwd(), {
+  groups: ['app', 'frontend'],
+});
+
+// write group structure files to scaffold/
+await writeScannedStructuresFromConfig(process.cwd(), {
+  groups: ['app'],
+});
+```
+
+---
+
+## Hooks & stubs (high‑level overview)
+
+### Regular hooks
+
+Regular hooks run around file lifecycle events:
+
+```ts
+import type { ScaffoldConfig } from '@timeax/scaffold';
+
+const config: ScaffoldConfig = {
+  // ...
+  hooks: {
+    preCreateFile: [
+      {
+        include: ['**/*.tsx'],
+        async fn(ctx) {
+          console.log('About to create', ctx.targetPath);
+        },
+      },
+    ],
+    postCreateFile: [],
+    preDeleteFile: [],
+    postDeleteFile: [],
+  },
+};
+```
+
+Hook kinds:
+
+* `preCreateFile`
+* `postCreateFile`
+* `preDeleteFile`
+* `postDeleteFile`
+
+Each receives a `HookContext` with fields like:
+
+* `projectRoot`
+* `targetPath` (project‑relative, POSIX)
+* `absolutePath`
+* `isDirectory`
+* `stubName?`
+
+### Stubs
+
+Stubs generate file contents and can have their own pre/post hooks:
+
+```ts
+import type { ScaffoldConfig } from '@timeax/scaffold';
+
+const config: ScaffoldConfig = {
+  // ...
+  stubs: {
+    page: {
+      name: 'page',
+      async getContent(ctx) {
+        const name = ctx.targetPath.split('/').pop();
+        return `export default function ${name}() {\n  return <div>${name}</div>;\n}`;
+      },
+      hooks: {
+        preStub: [
+          {
+            include: ['**/*.tsx'],
+            fn(ctx) {
+              console.log('Rendering page stub for', ctx.targetPath);
+            },
+          },
+        ],
+      },
+    },
+  },
+};
+```
+
+In `structure.txt`:
+
+```txt
+src/
+  pages/ @stub:page
+    home.tsx
+    about.tsx
+```
+
+Any file in `pages/` without an explicit stub inherits `@stub:page` from the parent directory.
+
+---
+
+## Cache & safety
+
+* Cache file (default): `.scaffold-cache.json` under project root (configurable via `cacheFile`).
+* Every file created by scaffold is recorded with:
+
+  * project‑relative path
+  * created time
+  * size at creation
+  * stub name (if any)
+  * group metadata
+* On each run, scaffold compares the **desired structure** vs. **cached entries**:
+
+  * If a cached file is no longer in the structure and still exists → deletion candidate.
+  * If its size exceeds `sizePromptThreshold` (configurable) and the CLI is interactive → prompt the user.
+  * If the user chooses “keep”, the file is left on disk and removed from the cache (user now owns it).
+
+This keeps scaffolding **idempotent** and avoids reckless deletes.
+
+---
+
+## Roadmap / Ideas
+
+Some things this package is intentionally designed to grow into:
+
+* Richer annotations in `*.txt` (e.g. per‑entry hooks, metadata aliases).
+* Stub groups (one logical stub creating multiple files).
+* Built‑in templates for common stacks (Laravel + Inertia, Next.js, etc.).
+* Better diff/dry‑run UX (show what will change without touching disk).
+
+PRs and ideas are welcome ✨

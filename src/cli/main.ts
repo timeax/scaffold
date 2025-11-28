@@ -1,0 +1,244 @@
+import readline from 'readline';
+import path from 'path';
+import fs from 'fs';
+import { Command } from 'commander';
+import { runOnce, RunOptions } from '../core/runner';
+import { watchScaffold } from '../core/watcher';
+import {
+  scanDirectoryToStructureText,
+  writeScannedStructuresFromConfig,
+} from '../core/scan-structure';
+import { initScaffold } from '../core/init-scaffold';
+import {
+  defaultLogger,
+  Logger,
+  type LogLevel,
+} from '../util/logger';
+import { ensureDirSync } from '../util/fs-utils';
+
+interface BaseCliOptions {
+  config?: string;
+  dir?: string;
+  watch?: boolean;
+  quiet?: boolean;
+  debug?: boolean;
+}
+
+interface ScanCliOptions {
+  root?: string;
+  out?: string;
+  ignore?: string[];
+  fromConfig?: boolean;
+  groups?: string[];
+}
+
+interface InitCliOptions {
+  force?: boolean;
+}
+
+/**
+ * Create a logger with the appropriate level from CLI flags.
+ */
+function createCliLogger(opts: { quiet?: boolean; debug?: boolean }): Logger {
+  if (opts.quiet) {
+    defaultLogger.setLevel('silent');
+  } else if (opts.debug) {
+    defaultLogger.setLevel('debug');
+  }
+  return defaultLogger.child('[cli]');
+}
+
+function askYesNo(question: string): Promise<'delete' | 'keep'> {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  return new Promise((resolve) => {
+    rl.question(`${question} [y/N] `, (answer) => {
+      rl.close();
+      const val = answer.trim().toLowerCase();
+      if (val === 'y' || val === 'yes') {
+        resolve('delete');
+      } else {
+        resolve('keep');
+      }
+    });
+  });
+}
+
+async function handleRunCommand(cwd: string, baseOpts: BaseCliOptions) {
+  const logger = createCliLogger(baseOpts);
+
+  const configPath = baseOpts.config
+    ? path.resolve(cwd, baseOpts.config)
+    : undefined;
+  const scaffoldDir = baseOpts.dir
+    ? path.resolve(cwd, baseOpts.dir)
+    : undefined;
+
+  logger.debug(
+    `Starting scaffold (cwd=${cwd}, config=${configPath ?? 'auto'}, dir=${scaffoldDir ?? 'scaffold/'
+    }, watch=${baseOpts.watch ? 'yes' : 'no'})`,
+  );
+
+  const runnerOptions: RunOptions = {
+    configPath,
+    scaffoldDir,
+    logger,
+    interactiveDelete: async ({
+      relativePath,
+      size,
+      createdByStub,
+      groupName,
+    }) => {
+      const sizeKb = (size / 1024).toFixed(1);
+      const stubInfo = createdByStub ? ` (stub: ${createdByStub})` : '';
+      const groupInfo = groupName ? ` [group: ${groupName}]` : '';
+      const question =
+        `File "${relativePath}"${groupInfo} is ~${sizeKb}KB and no longer in structure${stubInfo}. Delete it?`;
+
+      return askYesNo(question);
+    },
+  };
+
+  if (baseOpts.watch) {
+    // Watch mode – this will not return
+    watchScaffold(cwd, runnerOptions);
+  } else {
+    await runOnce(cwd, runnerOptions);
+  }
+}
+
+async function handleScanCommand(
+  cwd: string,
+  scanOpts: ScanCliOptions,
+  baseOpts: BaseCliOptions,
+) {
+  const logger = createCliLogger(baseOpts);
+
+  const useConfigMode =
+    scanOpts.fromConfig || (!scanOpts.root && !scanOpts.out);
+
+  if (useConfigMode) {
+    logger.info('Scanning project using scaffold config/groups...');
+    await writeScannedStructuresFromConfig(cwd, {
+      ignore: scanOpts.ignore,
+      groups: scanOpts.groups,
+    });
+    return;
+  }
+
+  // Manual single-root mode
+  const rootDir = path.resolve(cwd, scanOpts.root ?? '.');
+  const ignore = scanOpts.ignore ?? [];
+
+  logger.info(`Scanning directory for structure: ${rootDir}`);
+  const text = scanDirectoryToStructureText(rootDir, {
+    ignore,
+  });
+
+  if (scanOpts.out) {
+    const outPath = path.resolve(cwd, scanOpts.out);
+    const dir = path.dirname(outPath);
+    ensureDirSync(dir);
+    fs.writeFileSync(outPath, text, 'utf8');
+    logger.info(`Wrote structure to ${outPath}`);
+  } else {
+    process.stdout.write(text + '\n');
+  }
+}
+
+async function handleInitCommand(
+  cwd: string,
+  initOpts: InitCliOptions,
+  baseOpts: BaseCliOptions,
+) {
+  const logger = createCliLogger(baseOpts);
+
+  const scaffoldDirRel = baseOpts.dir ?? 'scaffold';
+
+  logger.info(`Initializing scaffold directory at "${scaffoldDirRel}"...`);
+
+  const result = await initScaffold(cwd, {
+    scaffoldDir: scaffoldDirRel,
+    force: initOpts.force,
+  });
+
+  logger.info(
+    `Done. Config: ${result.configPath}, Structure: ${result.structurePath}`,
+  );
+}
+
+async function main() {
+  const cwd = process.cwd();
+
+  const program = new Command();
+
+  program
+    .name('scaffold')
+    .description('@timeax/scaffold – structure-based project scaffolding')
+    // global-ish options used by base + scan + init
+    .option('-c, --config <path>', 'Path to scaffold config file')
+    .option('-d, --dir <path>', 'Path to scaffold directory (default: ./scaffold)')
+    .option('-w, --watch', 'Watch scaffold directory for changes')
+    .option('--quiet', 'Silence logs')
+    .option('--debug', 'Enable debug logging');
+
+  // scan subcommand
+  program
+    .command('scan')
+    .description(
+      'Generate structure.txt-style output (config-aware by default, or manual root/out)',
+    )
+    .option(
+      '--from-config',
+      'Scan based on scaffold config/groups and write structure files into scaffold/ (default if no root/out specified)',
+    )
+    .option(
+      '-r, --root <path>',
+      'Root directory to scan (manual mode)',
+    )
+    .option(
+      '-o, --out <path>',
+      'Output file path (manual mode)',
+    )
+    .option(
+      '--ignore <patterns...>',
+      'Additional glob patterns to ignore (relative to root)',
+    )
+    .option(
+      '--groups <names...>',
+      'Limit config-based scanning to specific groups (by name)',
+    )
+    .action(async (scanOpts: ScanCliOptions, cmd: Command) => {
+      const baseOpts = cmd.parent?.opts<BaseCliOptions>() ?? {};
+      await handleScanCommand(cwd, scanOpts, baseOpts);
+    });
+
+  // init subcommand
+  program
+    .command('init')
+    .description('Initialize scaffold folder and config/structure files')
+    .option(
+      '--force',
+      'Overwrite existing config/structure files if they already exist',
+    )
+    .action(async (initOpts: InitCliOptions, cmd: Command) => {
+      const baseOpts = cmd.parent?.opts<BaseCliOptions>() ?? {};
+      await handleInitCommand(cwd, initOpts, baseOpts);
+    });
+
+  // Base command: run scaffold once or in watch mode
+  program.action(async (opts: BaseCliOptions) => {
+    await handleRunCommand(cwd, opts);
+  });
+
+  await program.parseAsync(process.argv);
+}
+
+// Run and handle errors
+main().catch((err) => {
+  defaultLogger.error(err);
+  process.exit(1);
+});

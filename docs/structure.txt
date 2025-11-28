@@ -1,0 +1,25 @@
+src/
+  index.ts                # public API
+
+  schema/
+    index.ts              # barrel
+    structure.ts          # StructureEntry, DirEntry, FileEntry...
+    hooks.ts              # Hook kinds, HookContext, Hook configs
+    config.ts             # ScaffoldConfig + shared base types
+
+  core/
+    config-loader.ts      # finds scaffold folder + loads config
+    resolve-structure.ts  # resolves StructureEntry[] from txt or JS
+    structure-txt.ts      # parses scaffold/structure.txt
+    apply-structure.ts    # main engine for create/delete + hooks + cache
+    cache-manager.ts
+    hook-runner.ts
+    watcher.ts
+    runner.ts             # runOnce / runWatch orchestration
+
+  cli/
+    main.ts               # CLI entry, parses args, calls runner
+
+  util/
+    fs-utils.ts
+    logger.ts

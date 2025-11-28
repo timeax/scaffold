@@ -1,0 +1,48 @@
+{
+  "name": "@timeax/scaffold",
+  "version": "0.0.1",
+  "description": "A CLI tool that scaffolds project file structures based on a user-defined, type-safe configuration file.",
+  "keywords": [
+    "scaffold"
+  ],
+  "homepage": "https://github.com/timeax/scaffold#readme",
+  "bugs": {
+    "url": "https://github.com/timeax/scaffold/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/timeax/scaffold.git"
+  },
+  "license": "MIT",
+  "author": "Timothy Okpako David",
+  "type": "module",
+  "main": "dist/index.mjs",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "bin": {
+    "scaffold": "dist/cli.mjs"
+  },
+  "scripts": {
+    "build": "tsup",
+    "build:watch": "tsup --watch",
+    "scaffold": "node ./dist/cli.mjs",
+    "dev:cli": "ts-node src/cli/main.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "chokidar": "^5.0.0",
+    "commander": "^14.0.2",
+    "esbuild": "^0.27.0",
+    "minimatch": "^10.1.1"
+  }
+}
