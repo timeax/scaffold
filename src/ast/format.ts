@@ -6,8 +6,9 @@ import {
     type StructureAst,
     type AstNode, extractInlineCommentParts,
 } from './parser';
+import {FormatConfig} from "../schema";
 
-export interface FormatOptions {
+export interface FormatOptions extends FormatConfig {
     /**
      * Spaces per indent level for re-printing entries.
      * Defaults to 2.
