@@ -1,0 +1,12 @@
+{
+  "files.exclude": {
+    "dist": true,
+    ".vscode": true,
+    "node_modules": true,
+    ".gitattributes": true,
+    ".gitignore": true,
+    "package-lock.json": true,
+    "tsconfig.json": true,
+    "tsup.config.ts": true
+  }
+}

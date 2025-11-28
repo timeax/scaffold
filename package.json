@@ -24,6 +24,10 @@
     ".": {
       "import": "./dist/index.mjs",
       "require": "./dist/index.cjs"
+    },
+    "./ast": {
+      "import": "./dist/ast.mjs",
+      "require": "./dist/ast.cjs"
     }
   },
   "bin": {
@@ -35,12 +39,14 @@
     "scaffold": "node ./dist/cli.mjs",
     "dev:cli": "ts-node src/cli/main.ts",
     "prepublishOnly": "node ./scripts/prepublish.mjs",
-    "postpublish": "node ./scripts/postpublish.mjs"
+    "postpublish": "node ./scripts/postpublish.mjs",
+    "test": "vitest"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",
     "tsup": "^8.5.1",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.14"
   },
   "dependencies": {
     "chokidar": "^5.0.0",

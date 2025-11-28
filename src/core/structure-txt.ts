@@ -1,15 +1,16 @@
 // src/core/structure-txt.ts
 
-import type { StructureEntry, DirEntry, FileEntry } from '../schema';
-import { toPosixPath } from '../util/fs-utils';
+import type {StructureEntry, DirEntry, FileEntry} from '../schema';
+import {toPosixPath} from '../util/fs-utils';
+import {mapThrough} from "../ast";
 
 interface ParsedLine {
-   lineNo: number;
-   indentSpaces: number;
-   rawPath: string;
-   stub?: string;
-   include?: string[];
-   exclude?: string[];
+    lineNo: number;
+    indentSpaces: number;
+    rawPath: string;
+    stub?: string;
+    include?: string[];
+    exclude?: string[];
 }
 
 /**
@@ -26,39 +27,12 @@ interface ParsedLine {
  *   preceded by whitespace (space or tab).
  */
 function stripInlineComment(content: string): string {
-   let cutIndex = -1;
-   const len = content.length;
+    const cutIndex = mapThrough(content);
+    if (cutIndex === -1) {
+        return content.trimEnd();
+    }
 
-   for (let i = 0; i < len; i++) {
-      const ch = content[i];
-      const prev = i > 0 ? content[i - 1] : '';
-
-      // Inline "# ..."
-      if (ch === '#') {
-         if (i === 0) continue; // full-line handled earlier
-         if (prev === ' ' || prev === '\t') {
-            cutIndex = i;
-            break;
-         }
-      }
-
-      // Inline "// ..."
-      if (
-         ch === '/' &&
-         i + 1 < len &&
-         content[i + 1] === '/' &&
-         (prev === ' ' || prev === '\t')
-      ) {
-         cutIndex = i;
-         break;
-      }
-   }
-
-   if (cutIndex === -1) {
-      return content.trimEnd();
-   }
-
-   return content.slice(0, cutIndex).trimEnd();
+    return content.slice(0, cutIndex).trimEnd();
 }
 
 /**
@@ -69,77 +43,77 @@ function stripInlineComment(content: string): string {
  * - @exclude:pattern,pattern2
  */
 function parseLine(line: string, lineNo: number): ParsedLine | null {
-   const match = line.match(/^(\s*)(.*)$/);
-   if (!match) return null;
+    const match = line.match(/^(\s*)(.*)$/);
+    if (!match) return null;
 
-   const indentSpaces = match[1].length;
-   let rest = match[2];
+    const indentSpaces = match[1].length;
+    let rest = match[2];
 
-   // If line (after indent) is empty, skip
-   if (!rest.trim()) return null;
+    // If line (after indent) is empty, skip
+    if (!rest.trim()) return null;
 
-   // Full-line comments after indent
-   const trimmedRest = rest.trimStart();
-   if (trimmedRest.startsWith('#') || trimmedRest.startsWith('//')) {
-      return null;
-   }
+    // Full-line comments after indent
+    const trimmedRest = rest.trimStart();
+    if (trimmedRest.startsWith('#') || trimmedRest.startsWith('//')) {
+        return null;
+    }
 
-   // Strip inline comments (# or //) before parsing tokens
-   const stripped = stripInlineComment(rest);
-   const trimmed = stripped.trim();
-   if (!trimmed) return null;
+    // Strip inline comments (# or //) before parsing tokens
+    const stripped = stripInlineComment(rest);
+    const trimmed = stripped.trim();
+    if (!trimmed) return null;
 
-   const parts = trimmed.split(/\s+/);
-   if (!parts.length) return null;
+    const parts = trimmed.split(/\s+/);
+    if (!parts.length) return null;
 
-   const pathToken = parts[0];
+    const pathToken = parts[0];
 
-   // 🚫 Reserve ":" for annotations only – paths may not contain it.
-   if (pathToken.includes(':')) {
-      throw new Error(
-         `structure.txt: ":" is reserved for annotations (@stub:, @include:, etc). ` +
-         `Invalid path "${pathToken}" on line ${lineNo}.`,
-      );
-   }
+    // 🚫 Reserve ":" for annotations only – paths may not contain it.
+    if (pathToken.includes(':')) {
+        throw new Error(
+            `structure.txt: ":" is reserved for annotations (@stub:, @include:, etc). ` +
+            `Invalid path "${pathToken}" on line ${lineNo}.`,
+        );
+    }
 
-   let stub: string | undefined;
-   const include: string[] = [];
-   const exclude: string[] = [];
+    let stub: string | undefined;
+    const include: string[] = [];
+    const exclude: string[] = [];
 
-   for (const token of parts.slice(1)) {
-      if (token.startsWith('@stub:')) {
-         stub = token.slice('@stub:'.length);
-      } else if (token.startsWith('@include:')) {
-         const val = token.slice('@include:'.length);
-         if (val) {
-            include.push(
-               ...val
-                  .split(',')
-                  .map((s) => s.trim())
-                  .filter(Boolean),
-            );
-         }
-      } else if (token.startsWith('@exclude:')) {
-         const val = token.slice('@exclude:'.length);
-         if (val) {
-            exclude.push(
-               ...val
-                  .split(',')
-                  .map((s) => s.trim())
-                  .filter(Boolean),
-            );
-         }
-      }
-   }
+    for (const token of parts.slice(1)) {
+        if (token.startsWith('@stub:')) {
+            stub = token.slice('@stub:'.length);
+        } else if (token.startsWith('@include:')) {
+            const val = token.slice('@include:'.length);
+            if (val) {
+                include.push(
+                    ...val
+                        .split(',')
+                        .map((s) => s.trim())
+                        .filter(Boolean),
+                );
+            }
+        } else if (token.startsWith('@exclude:')) {
+            const val = token.slice('@exclude:'.length);
+            if (val) {
+                exclude.push(
+                    ...val
+                        .split(',')
+                        .map((s) => s.trim())
+                        .filter(Boolean),
+                );
+            }
+        }
+    }
 
-   return {
-      lineNo,
-      indentSpaces,
-      rawPath: pathToken,
-      stub,
-      include: include.length ? include : undefined,
-      exclude: exclude.length ? exclude : undefined,
-   };
+    return {
+        lineNo,
+        indentSpaces,
+        rawPath: pathToken,
+        stub,
+        include: include.length ? include : undefined,
+        exclude: exclude.length ? exclude : undefined,
+    };
 }
 
 /**
@@ -154,123 +128,123 @@ function parseLine(line: string, lineNo: number): ParsedLine | null {
  * - Folders must end with "/" in the txt; paths are normalized to POSIX.
  */
 export function parseStructureText(
-   text: string,
-   indentStep = 2,
+    text: string,
+    indentStep = 2,
 ): StructureEntry[] {
-   const lines = text.split(/\r?\n/);
-   const parsed: ParsedLine[] = [];
+    const lines = text.split(/\r?\n/);
+    const parsed: ParsedLine[] = [];
 
-   for (let i = 0; i < lines.length; i++) {
-      const lineNo = i + 1;
-      const p = parseLine(lines[i], lineNo);
-      if (p) parsed.push(p);
-   }
+    for (let i = 0; i < lines.length; i++) {
+        const lineNo = i + 1;
+        const p = parseLine(lines[i], lineNo);
+        if (p) parsed.push(p);
+    }
 
-   const rootEntries: StructureEntry[] = [];
+    const rootEntries: StructureEntry[] = [];
 
-   type StackItem = {
-      level: number;
-      entry: DirEntry | FileEntry;
-      isDir: boolean;
-   };
+    type StackItem = {
+        level: number;
+        entry: DirEntry | FileEntry;
+        isDir: boolean;
+    };
 
-   const stack: StackItem[] = [];
+    const stack: StackItem[] = [];
 
-   for (const p of parsed) {
-      const { indentSpaces, lineNo } = p;
+    for (const p of parsed) {
+        const {indentSpaces, lineNo} = p;
 
-      if (indentSpaces % indentStep !== 0) {
-         throw new Error(
-            `structure.txt: Invalid indent on line ${lineNo}. ` +
-            `Indent must be multiples of ${indentStep} spaces.`,
-         );
-      }
-
-      const level = indentSpaces / indentStep;
-
-      // Determine parent level and enforce no skipping
-      if (level > stack.length) {
-         // e.g. current stack depth 1, but line level=3 is invalid
-         if (level !== stack.length + 1) {
+        if (indentSpaces % indentStep !== 0) {
             throw new Error(
-               `structure.txt: Invalid indentation on line ${lineNo}. ` +
-               `You cannot jump more than one level at a time. ` +
-               `Previous depth: ${stack.length}, this line depth: ${level}.`,
+                `structure.txt: Invalid indent on line ${lineNo}. ` +
+                `Indent must be multiples of ${indentStep} spaces.`,
             );
-         }
-      }
+        }
 
-      // If this line is indented (level > 0), parent must exist and must be dir
-      if (level > 0) {
-         const parent = stack[level - 1]; // parent level is (level - 1)
-         if (!parent) {
-            throw new Error(
-               `structure.txt: Indented entry without a parent on line ${lineNo}.`,
-            );
-         }
-         if (!parent.isDir) {
-            throw new Error(
-               `structure.txt: Cannot indent under a file on line ${lineNo}. ` +
-               `Files cannot have children. Parent: "${parent.entry.path}".`,
-            );
-         }
-      }
+        const level = indentSpaces / indentStep;
 
-      const isDir = p.rawPath.endsWith('/');
-      const clean = p.rawPath.replace(/\/$/, '');
-      const basePath = toPosixPath(clean);
+        // Determine parent level and enforce no skipping
+        if (level > stack.length) {
+            // e.g. current stack depth 1, but line level=3 is invalid
+            if (level !== stack.length + 1) {
+                throw new Error(
+                    `structure.txt: Invalid indentation on line ${lineNo}. ` +
+                    `You cannot jump more than one level at a time. ` +
+                    `Previous depth: ${stack.length}, this line depth: ${level}.`,
+                );
+            }
+        }
 
-      // Pop stack until we are at the correct depth
-      while (stack.length > level) {
-         stack.pop();
-      }
+        // If this line is indented (level > 0), parent must exist and must be dir
+        if (level > 0) {
+            const parent = stack[level - 1]; // parent level is (level - 1)
+            if (!parent) {
+                throw new Error(
+                    `structure.txt: Indented entry without a parent on line ${lineNo}.`,
+                );
+            }
+            if (!parent.isDir) {
+                throw new Error(
+                    `structure.txt: Cannot indent under a file on line ${lineNo}. ` +
+                    `Files cannot have children. Parent: "${parent.entry.path}".`,
+                );
+            }
+        }
 
-      const parent = stack[stack.length - 1]?.entry as DirEntry | undefined;
-      const parentPath = parent ? parent.path.replace(/\/$/, '') : '';
+        const isDir = p.rawPath.endsWith('/');
+        const clean = p.rawPath.replace(/\/$/, '');
+        const basePath = toPosixPath(clean);
 
-      const fullPath = parentPath
-         ? `${parentPath}/${basePath}${isDir ? '/' : ''}`
-         : `${basePath}${isDir ? '/' : ''}`;
+        // Pop stack until we are at the correct depth
+        while (stack.length > level) {
+            stack.pop();
+        }
 
-      if (isDir) {
-         const dirEntry: DirEntry = {
-            type: 'dir',
-            path: fullPath,
-            children: [],
-            ...(p.stub ? { stub: p.stub } : {}),
-            ...(p.include ? { include: p.include } : {}),
-            ...(p.exclude ? { exclude: p.exclude } : {}),
-         };
+        const parent = stack[stack.length - 1]?.entry as DirEntry | undefined;
+        const parentPath = parent ? parent.path.replace(/\/$/, '') : '';
 
-         if (parent && parent.type === 'dir') {
-            parent.children = parent.children ?? [];
-            parent.children.push(dirEntry);
-         } else if (!parent) {
-            rootEntries.push(dirEntry);
-         }
+        const fullPath = parentPath
+            ? `${parentPath}/${basePath}${isDir ? '/' : ''}`
+            : `${basePath}${isDir ? '/' : ''}`;
 
-         stack.push({ level, entry: dirEntry, isDir: true });
-      } else {
-         const fileEntry: FileEntry = {
-            type: 'file',
-            path: fullPath,
-            ...(p.stub ? { stub: p.stub } : {}),
-            ...(p.include ? { include: p.include } : {}),
-            ...(p.exclude ? { exclude: p.exclude } : {}),
-         };
+        if (isDir) {
+            const dirEntry: DirEntry = {
+                type: 'dir',
+                path: fullPath,
+                children: [],
+                ...(p.stub ? {stub: p.stub} : {}),
+                ...(p.include ? {include: p.include} : {}),
+                ...(p.exclude ? {exclude: p.exclude} : {}),
+            };
 
-         if (parent && parent.type === 'dir') {
-            parent.children = parent.children ?? [];
-            parent.children.push(fileEntry);
-         } else if (!parent) {
-            rootEntries.push(fileEntry);
-         }
+            if (parent && parent.type === 'dir') {
+                parent.children = parent.children ?? [];
+                parent.children.push(dirEntry);
+            } else if (!parent) {
+                rootEntries.push(dirEntry);
+            }
 
-         // We still push files into the stack at this level so that
-         // bad indentation under them can be detected and rejected.
-         stack.push({ level, entry: fileEntry, isDir: false });
-      }
-   }
+            stack.push({level, entry: dirEntry, isDir: true});
+        } else {
+            const fileEntry: FileEntry = {
+                type: 'file',
+                path: fullPath,
+                ...(p.stub ? {stub: p.stub} : {}),
+                ...(p.include ? {include: p.include} : {}),
+                ...(p.exclude ? {exclude: p.exclude} : {}),
+            };
 
-   return rootEntries;
+            if (parent && parent.type === 'dir') {
+                parent.children = parent.children ?? [];
+                parent.children.push(fileEntry);
+            } else if (!parent) {
+                rootEntries.push(fileEntry);
+            }
+
+            // We still push files into the stack at this level so that
+            // bad indentation under them can be detected and rejected.
+            stack.push({level, entry: fileEntry, isDir: false});
+        }
+    }
+
+    return rootEntries;
 }
