@@ -1,255 +1,306 @@
 // src/core/apply-structure.ts
 
-import fs from 'fs';
-import path from 'path';
+import fs from "fs";
+import path from "path";
 import type {
-   ScaffoldConfig,
-   StructureEntry,
-   FileEntry,
-   DirEntry,
-   HookContext,
-} from '../schema';
-import { CacheManager } from './cache-manager';
-import { HookRunner } from './hook-runner';
+  ScaffoldConfig,
+  StructureEntry,
+  FileEntry,
+  DirEntry,
+  HookContext,
+} from "../schema";
+import { CacheManager } from "./cache-manager";
+import { HookRunner } from "./hook-runner";
 import {
-   ensureDirSync,
-   statSafeSync,
-   toProjectRelativePath,
-   toPosixPath,
-} from '../util/fs-utils';
-import type { Logger } from '../util/logger';
-import { defaultLogger } from '../util/logger';
+  ensureDirSync,
+  statSafeSync,
+  toProjectRelativePath,
+  toPosixPath,
+} from "../util/fs-utils";
+import type { Logger } from "../util/logger";
+import { defaultLogger } from "../util/logger";
 
 export interface InteractiveDeleteParams {
-   absolutePath: string;
-   relativePath: string; // project-root relative, POSIX
-   size: number;
-   createdByStub?: string;
-   groupName?: string;
+  absolutePath: string;
+  relativePath: string; // project-root relative, POSIX
+  size: number;
+  createdByStub?: string;
+  groupName?: string;
 }
 
 export interface ApplyOptions {
-   config: ScaffoldConfig;
+  config: ScaffoldConfig;
 
-   /**
-    * Global project root for this run.
-    */
-   projectRoot: string;
+  /**
+   * Global project root for this run (absolute or relative to CWD).
+   */
+  projectRoot: string;
 
-   /**
-    * Absolute directory where this structure group should be applied.
-    * For grouped mode, this is projectRoot + group.root.
-    * For single mode, this will simply be projectRoot.
-    */
-   baseDir: string;
+  /**
+   * Absolute directory where this structure group should be applied.
+   * For grouped mode, this is projectRoot + group.root.
+   * For single mode, this will simply be projectRoot.
+   */
+  baseDir: string;
 
-   /**
-    * Which structure entries to apply (already resolved from txt or inline).
-    */
-   structure: StructureEntry[];
+  /**
+   * Which structure entries to apply (already resolved from txt or inline).
+   */
+  structure: StructureEntry[];
 
-   cache: CacheManager;
-   hooks: HookRunner;
+  cache: CacheManager;
+  hooks: HookRunner;
 
-   /**
-    * Optional group metadata (only set for groups).
-    */
-   groupName?: string;
-   groupRoot?: string;
+  /**
+   * Optional group metadata (only set for groups).
+   */
+  groupName?: string;
+  groupRoot?: string;
 
-   /**
-    * Optional override for deletion threshold.
-    * Falls back to config.sizePromptThreshold or internal default.
-    */
-   sizePromptThreshold?: number;
+  /**
+   * Optional override for deletion threshold.
+   * Falls back to config.sizePromptThreshold or internal default.
+   */
+  sizePromptThreshold?: number;
 
-   /**
-    * Optional interactive delete callback.
-    * Should ask the user and return 'delete' or 'keep'.
-    */
-   interactiveDelete?: (
-      params: InteractiveDeleteParams,
-   ) => Promise<'delete' | 'keep'>;
+  /**
+   * Optional interactive delete callback.
+   * Should ask the user and return 'delete' or 'keep'.
+   */
+  interactiveDelete?: (
+    params: InteractiveDeleteParams,
+  ) => Promise<"delete" | "keep">;
 
-   /**
-    * Optional logger; defaults to defaultLogger.child('[apply]').
-    */
-   logger?: Logger;
+  /**
+   * Optional logger; defaults to defaultLogger.child('[apply]').
+   */
+  logger?: Logger;
 }
 
 export async function applyStructure(opts: ApplyOptions): Promise<void> {
-   const {
-      config,
-      projectRoot,
-      baseDir,
-      structure,
-      cache,
-      hooks,
+  const {
+    config,
+    projectRoot,
+    baseDir,
+    structure,
+    cache,
+    hooks,
+    groupName,
+    groupRoot,
+    sizePromptThreshold,
+    interactiveDelete,
+  } = opts;
+
+  const logger =
+    opts.logger ??
+    defaultLogger.child(groupName ? `[apply:${groupName}]` : "[apply]");
+
+  // Normalize roots to absolute, consistent paths
+  const projectRootAbs = path.resolve(projectRoot);
+  const baseDirAbs = path.resolve(baseDir);
+
+  // Helper for “is this absolute path inside this baseDir?”
+  const baseDirAbsWithSep = baseDirAbs.endsWith(path.sep)
+    ? baseDirAbs
+    : baseDirAbs + path.sep;
+
+  function isUnderBaseDir(absPath: string): boolean {
+    const norm = path.resolve(absPath);
+    return norm === baseDirAbs || norm.startsWith(baseDirAbsWithSep);
+  }
+
+  const desiredPaths = new Set<string>(); // project-root relative, POSIX
+
+  const threshold =
+    sizePromptThreshold ?? config.sizePromptThreshold ?? 128 * 1024;
+
+  async function walk(
+    entry: StructureEntry,
+    inheritedStub?: string,
+  ): Promise<void> {
+    const effectiveStub = entry.stub ?? inheritedStub;
+    if (entry.type === "dir") {
+      await handleDir(entry as DirEntry, effectiveStub);
+    } else {
+      await handleFile(entry as FileEntry, effectiveStub);
+    }
+  }
+
+  async function handleDir(
+    entry: DirEntry,
+    inheritedStub?: string,
+  ): Promise<void> {
+    const relFromBase = entry.path.replace(/^[./]+/, "");
+    const absDir = path.resolve(baseDirAbs, relFromBase);
+    const relFromRoot = toPosixPath(
+      toProjectRelativePath(projectRootAbs, absDir),
+    );
+
+    desiredPaths.add(relFromRoot);
+
+    ensureDirSync(absDir);
+
+    const nextStub = entry.stub ?? inheritedStub;
+
+    if (entry.children) {
+      for (const child of entry.children) {
+        // eslint-disable-next-line no-await-in-loop
+        await walk(child, nextStub);
+      }
+    }
+  }
+
+  async function handleFile(
+    entry: FileEntry,
+    inheritedStub?: string,
+  ): Promise<void> {
+    const relFromBase = entry.path.replace(/^[./]+/, "");
+    const absFile = path.resolve(baseDirAbs, relFromBase);
+    const relFromRoot = toPosixPath(
+      toProjectRelativePath(projectRootAbs, absFile),
+    );
+
+    desiredPaths.add(relFromRoot);
+
+    const stubName = entry.stub ?? inheritedStub;
+
+    const ctx: HookContext = {
+      projectRoot: projectRootAbs,
+      targetPath: relFromRoot,
+      absolutePath: absFile,
+      isDirectory: false,
+      stubName,
+    };
+
+    // If file already exists, do not overwrite; just ensure hooks (later we might
+    // add an "onExistingFile" hook, but right now we simply skip creation).
+    if (fs.existsSync(absFile)) {
+      return;
+    }
+
+    await hooks.runRegular("preCreateFile", ctx);
+
+    const dir = path.dirname(absFile);
+    ensureDirSync(dir);
+
+    if (stubName) {
+      await hooks.runStub("preStub", ctx);
+    }
+
+    let content = "";
+    const stubContent = await hooks.renderStubContent(ctx);
+    if (typeof stubContent === "string") {
+      content = stubContent;
+    }
+
+    fs.writeFileSync(absFile, content, "utf8");
+    const stats = fs.statSync(absFile);
+
+    cache.set({
+      path: relFromRoot,
+      createdAt: new Date().toISOString(),
+      sizeAtCreate: stats.size,
+      createdByStub: stubName,
       groupName,
       groupRoot,
-      sizePromptThreshold,
-      interactiveDelete,
-   } = opts;
+    });
 
-   const logger =
-      opts.logger ?? defaultLogger.child(groupName ? `[apply:${groupName}]` : '[apply]');
+    logger.info(`created ${relFromRoot}`);
 
-   const desiredPaths = new Set<string>(); // project-root relative, POSIX
+    if (stubName) {
+      await hooks.runStub("postStub", ctx);
+    }
 
-   const threshold = sizePromptThreshold ?? config.sizePromptThreshold ?? 128 * 1024;
+    await hooks.runRegular("postCreateFile", ctx);
+  }
 
-   async function walk(entry: StructureEntry, inheritedStub?: string): Promise<void> {
-      const effectiveStub = entry.stub ?? inheritedStub;
-      if (entry.type === 'dir') {
-         await handleDir(entry as DirEntry, effectiveStub);
-      } else {
-         await handleFile(entry as FileEntry, effectiveStub);
+  // 1) Create/update from structure
+  for (const entry of structure) {
+    // eslint-disable-next-line no-await-in-loop
+    await walk(entry);
+  }
+
+  // 2) Handle deletions: any cached path not in desiredPaths
+  //
+  // IMPORTANT:
+  // We *only* consider cached files that live under this run's baseDir.
+  // This prevents group A from deleting files owned by group B when
+  // applyStructure is called multiple times with different baseDir values.
+  // 2) Handle deletions: any cached path not in desiredPaths
+  for (const cachedPath of cache.allPaths()) {
+    const entry = cache.get(cachedPath);
+
+    // Group-aware deletion:
+    // - If we're in a group, only touch entries for this group.
+    // - If we're in single-root mode (no groupName), only touch entries
+    //   that also have no groupName (legacy / single-structure runs).
+    if (groupName) {
+      if (!entry || entry.groupName !== groupName) {
+        continue;
       }
-   }
-
-   async function handleDir(entry: DirEntry, inheritedStub?: string): Promise<void> {
-      const relFromBase = entry.path.replace(/^[./]+/, '');
-      const absDir = path.resolve(baseDir, relFromBase);
-      const relFromRoot = toPosixPath(
-         toProjectRelativePath(projectRoot, absDir),
-      );
-
-      desiredPaths.add(relFromRoot);
-
-      ensureDirSync(absDir);
-
-      const nextStub = entry.stub ?? inheritedStub;
-
-      if (entry.children) {
-         for (const child of entry.children) {
-            // eslint-disable-next-line no-await-in-loop
-            await walk(child, nextStub);
-         }
+    } else {
+      if (entry && entry.groupName) {
+        continue;
       }
-   }
+    }
 
-   async function handleFile(entry: FileEntry, inheritedStub?: string): Promise<void> {
-      const relFromBase = entry.path.replace(/^[./]+/, '');
-      const absFile = path.resolve(baseDir, relFromBase);
-      const relFromRoot = toPosixPath(
-         toProjectRelativePath(projectRoot, absFile),
-      );
+    // If this path is still desired within this group, skip it.
+    if (desiredPaths.has(cachedPath)) {
+      continue;
+    }
 
-      desiredPaths.add(relFromRoot);
+    const abs = path.resolve(projectRoot, cachedPath);
+    const stats = statSafeSync(abs);
 
-      const stubName = entry.stub ?? inheritedStub;
+    if (!stats) {
+      // File disappeared on disk – just clean cache.
+      cache.delete(cachedPath);
+      continue;
+    }
 
-      const ctx: HookContext = {
-         projectRoot,
-         targetPath: relFromRoot,
-         absolutePath: absFile,
-         isDirectory: false,
-         stubName,
-      };
+    // Only handle files here; dirs are not tracked in cache.
+    if (!stats.isFile()) {
+      cache.delete(cachedPath);
+      continue;
+    }
 
-      // If file already exists, do not overwrite; just ensure hooks
-      if (fs.existsSync(absFile)) {
-         return;
-      }
+    const ctx: HookContext = {
+      projectRoot,
+      targetPath: cachedPath,
+      absolutePath: abs,
+      isDirectory: false,
+      stubName: entry?.createdByStub,
+    };
 
-      await hooks.runRegular('preCreateFile', ctx);
+    await hooks.runRegular("preDeleteFile", ctx);
 
-      const dir = path.dirname(absFile);
-      ensureDirSync(dir);
-
-      if (stubName) {
-         await hooks.runStub('preStub', ctx);
-      }
-
-      let content = '';
-      const stubContent = await hooks.renderStubContent(ctx);
-      if (typeof stubContent === 'string') {
-         content = stubContent;
-      }
-
-      fs.writeFileSync(absFile, content, 'utf8');
-      const stats = fs.statSync(absFile);
-
-      cache.set({
-         path: relFromRoot,
-         createdAt: new Date().toISOString(),
-         sizeAtCreate: stats.size,
-         createdByStub: stubName,
-         groupName,
-         groupRoot,
+    let shouldDelete = true;
+    if (stats.size > threshold && interactiveDelete) {
+      const res = await interactiveDelete({
+        absolutePath: abs,
+        relativePath: cachedPath,
+        size: stats.size,
+        createdByStub: entry?.createdByStub,
+        groupName: entry?.groupName,
       });
 
-      logger.info(`created ${relFromRoot}`);
+      if (res === "keep") {
+        shouldDelete = false;
+        cache.delete(cachedPath); // user takes ownership
+        logger.info(`keeping ${cachedPath} (removed from cache)`);
+      }
+    }
 
-      if (stubName) {
-         await hooks.runStub('postStub', ctx);
+    if (shouldDelete) {
+      try {
+        fs.unlinkSync(abs);
+        logger.info(`deleted ${cachedPath}`);
+      } catch (err) {
+        logger.warn(`failed to delete ${cachedPath}`, err);
       }
 
-      await hooks.runRegular('postCreateFile', ctx);
-   }
-
-   // 1) Create/update from structure
-   for (const entry of structure) {
-      // eslint-disable-next-line no-await-in-loop
-      await walk(entry);
-   }
-
-   // 2) Handle deletions: any cached path not in desiredPaths
-   for (const cachedPath of cache.allPaths()) {
-      if (desiredPaths.has(cachedPath)) continue;
-
-      const abs = path.resolve(projectRoot, cachedPath);
-      const stats = statSafeSync(abs);
-
-      if (!stats) {
-         cache.delete(cachedPath);
-         continue;
-      }
-
-      // Only handle files here; dirs are not tracked in cache.
-      if (!stats.isFile()) {
-         cache.delete(cachedPath);
-         continue;
-      }
-
-      const entry = cache.get(cachedPath);
-      const ctx: HookContext = {
-         projectRoot,
-         targetPath: cachedPath,
-         absolutePath: abs,
-         isDirectory: false,
-         stubName: entry?.createdByStub,
-      };
-
-      await hooks.runRegular('preDeleteFile', ctx);
-
-      let shouldDelete = true;
-      if (stats.size > threshold && interactiveDelete) {
-         const res = await interactiveDelete({
-            absolutePath: abs,
-            relativePath: cachedPath,
-            size: stats.size,
-            createdByStub: entry?.createdByStub,
-            groupName: entry?.groupName,
-         });
-
-         if (res === 'keep') {
-            shouldDelete = false;
-            cache.delete(cachedPath); // user takes ownership
-            logger.info(`keeping ${cachedPath} (removed from cache)`);
-         }
-      }
-
-      if (shouldDelete) {
-         try {
-            fs.unlinkSync(abs);
-            logger.info(`deleted ${cachedPath}`);
-         } catch (err) {
-            logger.warn(`failed to delete ${cachedPath}`, err);
-         }
-
-         cache.delete(cachedPath);
-         await hooks.runRegular('postDeleteFile', ctx);
-      }
-   }
+      cache.delete(cachedPath);
+      await hooks.runRegular("postDeleteFile", ctx);
+    }
+  }
 }

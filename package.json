@@ -1,7 +1,7 @@
 {
   "name": "@timeax/scaffold",
   "private": false,
-  "version": "0.0.10",
+  "version": "0.0.11",
   "description": "A CLI tool that scaffolds project file structures based on a user-defined, type-safe configuration file.",
   "keywords": [
     "scaffold"
