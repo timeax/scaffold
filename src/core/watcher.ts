@@ -2,9 +2,9 @@
 
 import path from 'path';
 import chokidar from 'chokidar';
-import {runOnce, type RunOptions} from './runner';
-import {defaultLogger, type Logger} from '../util/logger';
-import {SCAFFOLD_ROOT_DIR} from '..';
+import { runOnce, type RunOptions } from './runner';
+import { defaultLogger, type Logger } from '../util/logger';
+import { SCAFFOLD_ROOT_DIR } from '..';
 
 export interface WatchOptions extends RunOptions {
     /**
@@ -24,11 +24,11 @@ export interface WatchOptions extends RunOptions {
 /**
  * Watch the scaffold directory and re-run scaffold on changes.
  *
- * This watches:
- * - .scaffold/config.* files
- * - .scaffold/*.txt / *.tss / *.stx files (structures)
+ * This watches the entire .scaffold folder and then filters events
+ * in-process to:
+ *   - config.* files
+ *   - *.txt / *.tss / *.stx
  *
- * CLI can call this when `--watch` is enabled.
  * Any `format` options in RunOptions are passed straight through to `runOnce`,
  * so formatting from config / CLI is applied on each re-run.
  */
@@ -60,7 +60,7 @@ export function watchScaffold(cwd: string, options: WatchOptions = {}): void {
                 // we already resolved scaffoldDir for watcher; pass it down
                 scaffoldDir,
             });
-            logger.info('Scaffold run completed.');
+            logger.info('Scaffold run completed');
         } catch (err) {
             logger.error('Scaffold run failed:', err);
         } finally {
@@ -77,32 +77,29 @@ export function watchScaffold(cwd: string, options: WatchOptions = {}): void {
         timer = setTimeout(run, debounceMs);
     }
 
-    const watcher = chokidar.watch(
-        [
-            // config files (ts/js/etc.)
-            path.join(scaffoldDir, 'config.*'),
+    // Only react to config.* and structure files inside scaffoldDir
+    function isInteresting(filePath: string): boolean {
+        const rel = path.relative(scaffoldDir, filePath);
+        // Outside .scaffold or in parent → ignore
+        if (rel.startsWith('..')) return false;
 
-            // structure files: plain txt + our custom extensions
-            path.join(scaffoldDir, '*.txt'),
-            path.join(scaffoldDir, '*.tss'),
-            path.join(scaffoldDir, '*.stx'),
-        ],
-        {
-            ignoreInitial: false,
-        },
-    );
+        const base = path.basename(filePath).toLowerCase();
+        // config.ts / config.js / config.mts / etc.
+        if (base.startsWith('config.')) return true;
+
+        const ext = path.extname(base);
+        return ext === '.txt' || ext === '.tss' || ext === '.stx';
+    }
+
+    const watcher = chokidar.watch(scaffoldDir, {
+        ignoreInitial: false,
+        persistent: true,
+    });
 
     watcher
-        .on('add', (filePath) => {
-            logger.debug(`File added: ${filePath}`);
-            scheduleRun();
-        })
-        .on('change', (filePath) => {
-            logger.debug(`File changed: ${filePath}`);
-            scheduleRun();
-        })
-        .on('unlink', (filePath) => {
-            logger.debug(`File removed: ${filePath}`);
+        .on('all', (event, filePath) => {
+            if (!isInteresting(filePath)) return;
+            logger.debug(`Event ${event} on ${filePath}`);
             scheduleRun();
         })
         .on('error', (error) => {
