@@ -11,10 +11,11 @@ function incrementPatch(version) {
       throw new Error(`[postpublish] Unsupported version format: "${version}"`);
    }
 
-   const [majorRaw, minorRaw, patchRaw] = parts;
-   const major = Number(majorRaw);
-   const minor = Number(minorRaw);
-   const patch = Number(patchRaw);
+   let [majorRaw, minorRaw, patchRaw] = parts;
+
+   let major = Number(majorRaw);
+   let minor = Number(minorRaw);
+   let patch = Number(patchRaw);
 
    if (Number.isNaN(major) || Number.isNaN(minor) || Number.isNaN(patch)) {
       throw new Error(
@@ -22,8 +23,17 @@ function incrementPatch(version) {
       );
    }
 
-   const nextPatch = patch + 1;
-   return `${major}.${minor}.${nextPatch}`;
+   // Single-digit patch rule:
+   // - If patch >= 9, roll into next minor and reset patch to 0.
+   // - Otherwise, just increment patch.
+   if (patch >= 9) {
+      patch = 0;
+      minor += 1;
+   } else {
+      patch += 1;
+   }
+
+   return `${major}.${minor}.${patch}`;
 }
 
 function main() {
