@@ -1,7 +1,7 @@
 {
   "name": "@timeax/scaffold",
   "private": false,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A CLI tool that scaffolds project file structures based on a user-defined, type-safe configuration file.",
   "keywords": [
     "scaffold"
@@ -22,14 +22,24 @@
   "types": "dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.mjs",
-      "require": "./dist/index.cjs"
+      "import": {
+        "types": "./dist/index.d.mts",
+        "default": "./dist/index.mjs"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
     },
     "./ast": {
-      "types": "./dist/ast.d.ts",
-      "import": "./dist/ast.mjs",
-      "require": "./dist/ast.cjs"
+      "import": {
+        "types": "./dist/ast.d.mts",
+        "default": "./dist/ast.mjs"
+      },
+      "require": {
+        "types": "./dist/ast.d.cts",
+        "default": "./dist/ast.cjs"
+      }
     }
   },
   "bin": {
