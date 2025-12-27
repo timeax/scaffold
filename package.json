@@ -22,10 +22,12 @@
   "types": "dist/index.d.ts",
   "exports": {
     ".": {
+      "types": "./dist/index.d.ts",
       "import": "./dist/index.mjs",
       "require": "./dist/index.cjs"
     },
     "./ast": {
+      "types": "./dist/ast.d.ts",
       "import": "./dist/ast.mjs",
       "require": "./dist/ast.cjs"
     }
