@@ -42,7 +42,7 @@ function stripInlineComment(content: string): string {
  * - @include:pattern,pattern2
  * - @exclude:pattern,pattern2
  */
-function parseLine(line: string, lineNo: number): ParsedLine | null {
+function parseLine(line: string, lineNo: number, fileName: string): ParsedLine | null {
     const match = line.match(/^(\s*)(.*)$/);
     if (!match) return null;
 
@@ -71,7 +71,7 @@ function parseLine(line: string, lineNo: number): ParsedLine | null {
     // 🚫 Reserve ":" for annotations only – paths may not contain it.
     if (pathToken.includes(':')) {
         throw new Error(
-            `structure.txt: ":" is reserved for annotations (@stub:, @include:, etc). ` +
+            `${fileName}: ":" is reserved for annotations (@stub:, @include:, etc). ` +
             `Invalid path "${pathToken}" on line ${lineNo}.`,
         );
     }
@@ -128,6 +128,7 @@ function parseLine(line: string, lineNo: number): ParsedLine | null {
  * - Folders must end with "/" in the txt; paths are normalized to POSIX.
  */
 export function parseStructureText(
+    fileName: string,
     text: string,
     indentStep = 2,
 ): StructureEntry[] {
@@ -136,7 +137,7 @@ export function parseStructureText(
 
     for (let i = 0; i < lines.length; i++) {
         const lineNo = i + 1;
-        const p = parseLine(lines[i], lineNo);
+        const p = parseLine(lines[i], lineNo, fileName);
         if (p) parsed.push(p);
     }
 
@@ -155,7 +156,7 @@ export function parseStructureText(
 
         if (indentSpaces % indentStep !== 0) {
             throw new Error(
-                `structure.txt: Invalid indent on line ${lineNo}. ` +
+                `${fileName}: Invalid indent on line ${lineNo}. ` +
                 `Indent must be multiples of ${indentStep} spaces.`,
             );
         }
@@ -167,7 +168,7 @@ export function parseStructureText(
             // e.g. current stack depth 1, but line level=3 is invalid
             if (level !== stack.length + 1) {
                 throw new Error(
-                    `structure.txt: Invalid indentation on line ${lineNo}. ` +
+                    `${fileName}: Invalid indentation on line ${lineNo}. ` +
                     `You cannot jump more than one level at a time. ` +
                     `Previous depth: ${stack.length}, this line depth: ${level}.`,
                 );
@@ -179,12 +180,12 @@ export function parseStructureText(
             const parent = stack[level - 1]; // parent level is (level - 1)
             if (!parent) {
                 throw new Error(
-                    `structure.txt: Indented entry without a parent on line ${lineNo}.`,
+                    `${fileName}: Indented entry without a parent on line ${lineNo}.`,
                 );
             }
             if (!parent.isDir) {
                 throw new Error(
-                    `structure.txt: Cannot indent under a file on line ${lineNo}. ` +
+                    `${fileName}: Cannot indent under a file on line ${lineNo}. ` +
                     `Files cannot have children. Parent: "${parent.entry.path}".`,
                 );
             }

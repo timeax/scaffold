@@ -15,6 +15,7 @@ const logger = defaultLogger.child('[structure]');
 export function resolveGroupStructure(
    scaffoldDir: string,
    group: StructureGroupConfig,
+   config: ScaffoldConfig
 ): StructureEntry[] {
    if (group.structure && group.structure.length) {
       logger.debug(`Using inline structure for group "${group.name}"`);
@@ -33,7 +34,7 @@ export function resolveGroupStructure(
 
    logger.debug(`Reading structure for group "${group.name}" from ${filePath}`);
    const raw = fs.readFileSync(filePath, 'utf8');
-   return parseStructureText(raw);
+   return parseStructureText(fileName, raw, config.indentStep);
 }
 
 /**
@@ -60,5 +61,5 @@ export function resolveSingleStructure(
 
    logger.debug(`Reading single structure from ${filePath}`);
    const raw = fs.readFileSync(filePath, 'utf8');
-   return parseStructureText(raw);
+   return parseStructureText(fileName, raw, config.indentStep);
 }

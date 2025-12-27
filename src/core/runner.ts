@@ -61,7 +61,7 @@ export async function runOnce(cwd: string, options: RunOptions = {}): Promise<vo
     if (config.groups && config.groups.length > 0) {
         for (const group of config.groups) {
             const groupRootAbs = path.resolve(projectRoot, group.root);
-            const structure = resolveGroupStructure(scaffoldDir, group);
+            const structure = resolveGroupStructure(scaffoldDir, group, config);
 
             const groupLogger = logger.child(`[group:${group.name}]`);
 
