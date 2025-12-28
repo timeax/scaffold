@@ -56,6 +56,7 @@
   },
   "devDependencies": {
     "@types/node": "^24.10.1",
+    "@types/pluralize": "^0.0.33",
     "prettier": "^3.7.1",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3",
@@ -65,6 +66,7 @@
     "chokidar": "^5.0.0",
     "commander": "^14.0.2",
     "esbuild": "^0.27.0",
-    "minimatch": "^10.1.1"
+    "minimatch": "^10.1.1",
+    "pluralize": "^8.0.0"
   }
 }

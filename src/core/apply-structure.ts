@@ -19,6 +19,7 @@ import {
 } from "../util/fs-utils";
 import type { Logger } from "../util/logger";
 import { defaultLogger } from "../util/logger";
+import pluralize from "pluralize";
 
 export interface InteractiveDeleteParams {
   absolutePath: string;
@@ -163,12 +164,18 @@ export async function applyStructure(opts: ApplyOptions): Promise<void> {
     desiredPaths.add(relFromRoot);
 
     const stubName = entry.stub ?? inheritedStub;
+    const extension = path.extname(relFromRoot);
+    const fileName = path.basename(relFromRoot, extension);
 
     const ctx: HookContext = {
       projectRoot: projectRootAbs,
       targetPath: relFromRoot,
       absolutePath: absFile,
       isDirectory: false,
+      fileName,
+      dirName: path.dirname(relFromRoot),
+      extension,
+      pluralFileName: pluralize.plural(fileName),
       stubName,
     };
 
@@ -264,11 +271,18 @@ export async function applyStructure(opts: ApplyOptions): Promise<void> {
       continue;
     }
 
+    const extension = path.extname(abs);
+    const fileName = path.basename(abs, extension);
+
     const ctx: HookContext = {
       projectRoot,
       targetPath: cachedPath,
       absolutePath: abs,
       isDirectory: false,
+      fileName,
+      dirName: path.dirname(cachedPath),
+      extension,
+      pluralFileName: pluralize.plural(fileName),
       stubName: entry?.createdByStub,
     };
 

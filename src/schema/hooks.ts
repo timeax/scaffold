@@ -54,6 +54,14 @@ export interface HookContext {
     * produced a given file.
     */
    stubName?: string;
+
+   fileName: string;
+   dirName: string;
+   extension?: string;
+   /**
+    * Plural form of the file name (without extension), if applicable.
+    */
+   pluralFileName: string;
 }
 
 /**
